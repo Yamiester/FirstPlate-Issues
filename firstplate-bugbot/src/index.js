@@ -104,7 +104,7 @@ async function postBugPanel(channel) {
             "**How it works:**\n" +
             "1. Click **Report a Bug** below.\n" +
             "2. Fill out the form with as much detail as possible.\n" +
-            "3. Choose to either create a GitHub issue only or open a private chat with staff.",
+            "3. After submitting, you can optionally chat with devs to provide more info.",
         components: [row],
     });
 }
@@ -173,10 +173,10 @@ client.on("interactionCreate", async (i) => {
         }
 
         // Modal submit -> choice buttons
+        // Modal submit -> Create issue + log -> Optional chat button
         if (i.isModalSubmit() && i.customId === "bug_modal_submit") {
             const reportId = newReportId();
-
-            pending.set(reportId, {
+            const r = {
                 reportId,
                 userId: i.user.id,
                 title: i.fields.getTextInputValue("title"),
@@ -184,36 +184,9 @@ client.on("interactionCreate", async (i) => {
                 steps: i.fields.getTextInputValue("steps") || "",
                 expected: i.fields.getTextInputValue("expected") || "",
                 actual: i.fields.getTextInputValue("actual") || "",
-            });
+            };
 
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId(`issue_only:${reportId}`)
-                    .setLabel("📩 Create GitHub issue only")
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId(`issue_chat:${reportId}`)
-                    .setLabel("💬 Create issue + open chat")
-                    .setStyle(ButtonStyle.Primary)
-            );
-
-            return i.reply({
-                content: `Submitted **${reportId}**. What do you want to do?`,
-                components: [row],
-                flags: [MessageFlags.Ephemeral],
-            });
-        }
-
-        // Choice handlers
-        if (i.isButton() && (i.customId.startsWith("issue_only:") || i.customId.startsWith("issue_chat:"))) {
-            const [mode, reportId] = i.customId.split(":");
-            const r = pending.get(reportId);
-
-            if (!r) return i.reply({ content: "That report expired. Please submit again.", ephemeral: true });
-            if (i.user.id !== r.userId)
-                return i.reply({ content: "Only the person who submitted this report can choose this.", ephemeral: true });
-
-            // Create GitHub issue body
+            // Create GitHub issue immediately
             const issueTitle = `[Bug] ${r.title}`;
             const issueBody =
                 `**Report ID:** ${reportId}\n` +
@@ -224,7 +197,6 @@ client.on("interactionCreate", async (i) => {
                 `## Actual\n${r.actual || "(not provided)"}\n`;
 
             const labels = [GITHUB_LABEL || "bug"];
-
             const issue = await createGitHubIssue({ title: issueTitle, body: issueBody, labels });
             const issueUrl = issue.html_url;
 
@@ -239,22 +211,42 @@ client.on("interactionCreate", async (i) => {
                 actual: r.actual,
             });
 
-            // Post to staff bug log
+            // Post to staff bug log immediately
             const logChannel = await i.guild.channels.fetch(BUG_LOG_CHANNEL_ID).catch(() => null);
             if (logChannel) await logChannel.send({ embeds: [embed] });
 
-            // Issue only
-            if (mode === "issue_only") {
-                pending.delete(reportId);
-                return i.update({
-                    content: `✅ **Report ${reportId} Complete**\nA GitHub issue has been created: ${issueUrl}\n\n*This message is only visible to you.*`,
-                    components: [],
-                });
-            }
+            // Store for potential chat
+            pending.set(reportId, { ...r, issueUrl, embed });
 
-            // Issue + chat: create private ticket channel
-            const safeUser = (i.user.username || "player").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10) || "player";
-            const channelName = `bug-${safeUser}-${reportId.toLowerCase()}`.slice(0, 90);
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`bug_chat_start:${reportId}`)
+                    .setLabel("💬 Speak with Developers")
+                    .setStyle(ButtonStyle.Primary)
+            );
+
+            return i.reply({
+                content: `✅ **Bug Report Submitted!**\n` +
+                    `Your report has been logged and a GitHub issue has been created: ${issueUrl}\n\n` +
+                    `If you have screenshots or want to speak directly with a developer to better explain the issue, click below:`,
+                components: [row],
+                flags: [MessageFlags.Ephemeral],
+            });
+        }
+
+        // Choice handlers
+        // Optional Chat Handler
+        if (i.isButton() && i.customId.startsWith("bug_chat_start:")) {
+            const reportId = i.customId.split(":")[1];
+            const r = pending.get(reportId);
+
+            if (!r) return i.reply({ content: "That session expired. If you still need a chat, please contact staff directly.", flags: [MessageFlags.Ephemeral] });
+            if (i.user.id !== r.userId)
+                return i.reply({ content: "Only the person who submitted this report can open a chat.", flags: [MessageFlags.Ephemeral] });
+
+            // Create private ticket channel using sanitized bug title
+            const safeTitle = r.title.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "bug";
+            const channelName = `bug-${safeTitle}-${reportId.toLowerCase()}`.slice(0, 90);
 
             const ticket = await i.guild.channels.create({
                 name: channelName,
@@ -298,14 +290,14 @@ client.on("interactionCreate", async (i) => {
             );
 
             await ticket.send({
-                content: `Thanks! Here’s the GitHub issue: ${issueUrl}\nDrop screenshots/clips here if you have them.`,
-                embeds: [embed],
+                content: `Thanks! We've saved your report and created a GitHub issue: ${r.issueUrl}\nYou can drop screenshots or extra details here.`,
+                embeds: [r.embed],
                 components: [closeRow],
             });
 
             pending.delete(reportId);
             return i.update({
-                content: `✅ **Report ${reportId} Complete**\nCreated GitHub issue: ${issueUrl}\nA private chat has been opened for you here: ${ticket}\n\n*This message is only visible to you.*`,
+                content: `✅ **A private chat has been opened for you here:** ${ticket}`,
                 components: [],
             });
         }
