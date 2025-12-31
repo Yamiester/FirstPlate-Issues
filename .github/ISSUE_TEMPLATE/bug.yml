@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a bug in FirstPlate
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected
+    validations:
+      required: false
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+    validations:
+      required: false
+  - type: input
+    id: platform
+    attributes:
+      label: Platform (Windows/SteamDeck/etc.)
+    validations:
+      required: false
