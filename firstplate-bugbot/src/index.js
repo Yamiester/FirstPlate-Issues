@@ -11,6 +11,8 @@ import {
     EmbedBuilder,
     PermissionFlagsBits,
     ChannelType,
+    MessageFlags,
+    Events,
 } from "discord.js";
 
 const {
@@ -97,16 +99,17 @@ async function postBugPanel(channel) {
 
     await channel.send({
         content:
-            "**Found a bug in FirstPlate?**\n" +
-            "Click **Report a Bug** and fill out the form.\n\n" +
-            "After submitting, choose:\n" +
-            "• **📩 Create GitHub issue only** (no chat)\n" +
-            "• **💬 Create issue + open chat** (private ticket channel)",
+            "## 🛡️ Bug Reporting Center\n" +
+            "Help us improve FirstPlate by reporting issues you encounter. Your reports are handled privately by our staff.\n\n" +
+            "**How it works:**\n" +
+            "1. Click **Report a Bug** below.\n" +
+            "2. Fill out the form with as much detail as possible.\n" +
+            "3. Choose to either create a GitHub issue only or open a private chat with staff.",
         components: [row],
     });
 }
 
-client.once("ready", () => {
+client.once(Events.ClientReady, () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
 });
 
@@ -120,7 +123,7 @@ client.on("interactionCreate", async (i) => {
             }
 
             await postBugPanel(i.channel);
-            return i.reply({ content: "✅ Bug panel posted.", ephemeral: true });
+            return i.reply({ content: "✅ Bug panel posted.", flags: [MessageFlags.Ephemeral] });
         }
 
         // Button -> open modal
@@ -197,7 +200,7 @@ client.on("interactionCreate", async (i) => {
             return i.reply({
                 content: `Submitted **${reportId}**. What do you want to do?`,
                 components: [row],
-                ephemeral: true,
+                flags: [MessageFlags.Ephemeral],
             });
         }
 
@@ -243,7 +246,10 @@ client.on("interactionCreate", async (i) => {
             // Issue only
             if (mode === "issue_only") {
                 pending.delete(reportId);
-                return i.update({ content: `✅ Created GitHub issue: ${issueUrl}`, components: [] });
+                return i.update({
+                    content: `✅ **Report ${reportId} Complete**\nA GitHub issue has been created: ${issueUrl}\n\n*This message is only visible to you.*`,
+                    components: [],
+                });
             }
 
             // Issue + chat: create private ticket channel
@@ -298,7 +304,10 @@ client.on("interactionCreate", async (i) => {
             });
 
             pending.delete(reportId);
-            return i.update({ content: `✅ Created issue + opened chat: ${ticket}`, components: [] });
+            return i.update({
+                content: `✅ **Report ${reportId} Complete**\nCreated GitHub issue: ${issueUrl}\nA private chat has been opened for you here: ${ticket}\n\n*This message is only visible to you.*`,
+                components: [],
+            });
         }
 
         // Close Ticket Handler
@@ -306,10 +315,10 @@ client.on("interactionCreate", async (i) => {
             const isStaff = i.member.roles.cache.has(STAFF_ROLE_ID);
 
             if (isStaff) {
-                await i.reply({ content: "Closing ticket in 5 seconds...", ephemeral: false });
+                await i.reply({ content: "Closing ticket in 5 seconds...", flags: [] });
                 setTimeout(() => i.channel.delete().catch(() => { }), 5000);
             } else {
-                await i.reply({ content: "❌ Only staff can close this ticket.", ephemeral: true });
+                await i.reply({ content: "❌ Only staff can close this ticket.", flags: [MessageFlags.Ephemeral] });
             }
             return;
         }
