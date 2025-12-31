@@ -254,8 +254,19 @@ client.on("interactionCreate", async (i) => {
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: TICKET_CATEGORY_ID,
+                topic: `Report ID: ${reportId} | User: ${i.user.id}`,
                 permissionOverwrites: [
                     { id: i.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+                    {
+                        id: client.user.id,
+                        allow: [
+                            PermissionFlagsBits.ViewChannel,
+                            PermissionFlagsBits.SendMessages,
+                            PermissionFlagsBits.ReadMessageHistory,
+                            PermissionFlagsBits.EmbedLinks,
+                            PermissionFlagsBits.AttachFiles
+                        ]
+                    },
                     {
                         id: i.user.id,
                         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
@@ -272,13 +283,35 @@ client.on("interactionCreate", async (i) => {
                 ],
             });
 
+            const closeRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId("bug_close_ticket")
+                    .setLabel("Close Ticket")
+                    .setStyle(ButtonStyle.Danger)
+                    .setEmoji("🔒")
+            );
+
             await ticket.send({
                 content: `Thanks! Here’s the GitHub issue: ${issueUrl}\nDrop screenshots/clips here if you have them.`,
                 embeds: [embed],
+                components: [closeRow],
             });
 
             pending.delete(reportId);
             return i.update({ content: `✅ Created issue + opened chat: ${ticket}`, components: [] });
+        }
+
+        // Close Ticket Handler
+        if (i.isButton() && i.customId === "bug_close_ticket") {
+            const isStaff = i.member.roles.cache.has(STAFF_ROLE_ID);
+
+            if (isStaff) {
+                await i.reply({ content: "Closing ticket in 5 seconds...", ephemeral: false });
+                setTimeout(() => i.channel.delete().catch(() => { }), 5000);
+            } else {
+                await i.reply({ content: "❌ Only staff can close this ticket.", ephemeral: true });
+            }
+            return;
         }
     } catch (err) {
         console.error(err);
